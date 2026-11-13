@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Adem</title>
+<!-- ===== APP-GEVOEL: viewport, kleuren, startscherm-meta ===== -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1724">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Adem">
+<!-- Eenvoudig SVG-icoon (tabblad). Het PNG-icoon voor startscherm en manifest wordt in de JS getekend. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230f1724'/%3E%3Ccircle cx='50' cy='50' r='30' fill='%237fb8b0' fill-opacity='.55'/%3E%3Ccircle cx='50' cy='50' r='19' fill='%23a79bd1' fill-opacity='.8'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" id="touchicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230f1724'/%3E%3Ccircle cx='50' cy='50' r='30' fill='%237fb8b0' fill-opacity='.55'/%3E%3C/svg%3E">
+
+<style>
+/* ===== BASIS ===== */
+:root{
+  --bg:#0f1724; --fg:#d6e4ea; --dim:#8a9bab;
+  --teal:#7fb8b0; --lav:#a79bd1; --card:#172235; --line:#26344a;
+}
+:root{ --sz:min(64vw,36vh); }
+@supports (height:1dvh){ :root{ --sz:min(64vw,36dvh); } }
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+[hidden]{ display:none !important; }
+html,body{
+  height:100%; margin:0; background:var(--bg); color:var(--fg);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  overscroll-behavior:none; overflow:hidden;
+}
+body{
+  user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  touch-action:manipulation;
+}
+button{
+  font:inherit; color:inherit; background:none; border:0; padding:0;
+  cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation;
+}
+
+/* ===== LAYOUT ===== */
+#app{
+  position:fixed; inset:0;
+  max-width:480px; margin:0 auto;
+  display:flex; flex-direction:column; gap:12px;
+  padding:max(env(safe-area-inset-top),14px) max(env(safe-area-inset-right),16px)
+          max(env(safe-area-inset-bottom),16px) max(env(safe-area-inset-left),16px);
+  overflow-y:auto; overscroll-behavior:contain;
+}
+.stage{
+  flex:1 0 auto; min-height:200px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+}
+
+/* ===== 1. VISUELE BEGELEIDING ===== */
+.orbwrap{ position:relative; width:var(--sz); height:var(--sz); }
+.orb{
+  position:absolute; inset:0; border-radius:50%;
+  background:radial-gradient(circle at 50% 38%, rgba(167,155,209,.55), rgba(127,184,176,.42) 62%, rgba(127,184,176,.16));
+  border:1px solid rgba(214,228,234,.16);
+  box-shadow:0 0 60px rgba(127,184,176,.22), 0 0 120px rgba(167,155,209,.12);
+  transform:scale(.7); will-change:transform;
+}
+.orbtext{
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; text-align:center; pointer-events:none;
+}
+#phase{ font-size:clamp(18px,5.2vw,24px); letter-spacing:.02em; }
+#count{ font-size:clamp(34px,11vw,52px); font-weight:300; line-height:1.1; font-variant-numeric:tabular-nums; }
+#phase.big{ font-size:clamp(28px,8.5vw,38px); font-weight:300; }
+#sub{ font-size:15px; color:var(--dim); margin-top:2px; }
+.cyc{ font-size:16px; color:var(--dim); min-height:20px; letter-spacing:.04em; }
+
+/* ===== INSTELLINGEN ===== */
+#settings{ display:flex; flex-direction:column; gap:12px; flex:0 0 auto; }
+.run #settings{ display:none; }
+.presets{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.preset{
+  border:1px solid var(--line); background:var(--card); border-radius:14px;
+  padding:8px 12px; min-height:64px; text-align:left;
+  display:flex; flex-direction:column; justify-content:center;
+}
+.preset b{ font-weight:600; font-size:18px; }
+.preset small{ color:var(--dim); font-size:15px; letter-spacing:.05em; }
+.preset.on{ border-color:var(--teal); background:#1a2b3a; box-shadow:0 0 0 1px var(--teal) inset; }
+
+.eigen{ display:none; grid-template-columns:1fr 1fr; gap:8px 14px; }
+.eigen.open{ display:grid; }
+.pcell{ display:flex; align-items:center; justify-content:space-between; font-size:16px; color:var(--dim); }
+.step{ display:flex; align-items:center; gap:4px; }
+.step button{
+  width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+  background:var(--card); font-size:20px; line-height:1;
+}
+.step span{ min-width:30px; text-align:center; color:var(--fg); font-size:20px; font-variant-numeric:tabular-nums; }
+
+.row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.chips{ display:flex; gap:6px; }
+.chip{
+  min-width:46px; height:40px; padding:0 12px; border-radius:20px;
+  border:1px solid var(--line); background:var(--card);
+}
+.chip.on{ border-color:var(--teal); color:var(--teal); }
+
+.togs{ display:flex; gap:8px; }
+.tog{
+  flex:1; height:40px; border-radius:20px; border:1px solid var(--line);
+  background:var(--card); color:var(--dim); font-size:17px;
+}
+.tog[aria-pressed="true"]{ color:var(--fg); border-color:var(--lav); }
+
+#total{ text-align:center; font-size:18px; }
+.hint{ text-align:center; font-size:14px; color:var(--dim); margin:-4px 0 0; }
+
+/* ===== 4. START/STOP ===== */
+#go{
+  flex:0 0 auto; width:100%; min-height:68px; border-radius:34px;
+  font-size:20px; font-weight:600; letter-spacing:.04em; color:#0f1724;
+  background:linear-gradient(135deg,var(--teal),var(--lav));
+  box-shadow:0 6px 24px rgba(127,184,176,.25);
+}
+#go:active{ transform:scale(.985); }
+#go.stop{ background:transparent; color:var(--fg); border:1px solid var(--line); box-shadow:none; }
+
+@media (prefers-reduced-motion: reduce){
+  #go:active{ transform:none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <main class="stage">
+    <div class="orbwrap">
+      <div class="orb" id="orb"></div>
+      <div class="orbtext">
+        <div id="phase" aria-live="polite">Klaar?</div>
+        <div id="count"></div>
+        <div id="sub"></div>
+      </div>
+    </div>
+    <div class="cyc" id="cyc">&nbsp;</div>
+  </main>
+
+  <section id="settings">
+    <!-- 2. Ritmes -->
+    <div class="presets" role="group" aria-label="Ademhalingsritme">
+      <button class="preset" data-preset="ontspanning"><b>Ontspanning</b><small>4-7-8-0</small></button>
+      <button class="preset" data-preset="box"><b>Box breathing</b><small>4-4-4-4</small></button>
+      <button class="preset" data-preset="balans"><b>Balans</b><small>5-0-5-0</small></button>
+      <button class="preset" data-preset="eigen"><b>Eigen</b><small id="pat-eigen">4-7-8-0</small></button>
+    </div>
+    <div class="eigen" id="eigenbox" aria-label="Eigen ritme in seconden">
+      <div class="pcell"><span>In</span><div class="step"><button data-p="0" data-d="-1" aria-label="Inademen korter">&minus;</button><span id="pv0">4</span><button data-p="0" data-d="1" aria-label="Inademen langer">+</button></div></div>
+      <div class="pcell"><span>Vast</span><div class="step"><button data-p="1" data-d="-1" aria-label="Vasthouden korter">&minus;</button><span id="pv1">7</span><button data-p="1" data-d="1" aria-label="Vasthouden langer">+</button></div></div>
+      <div class="pcell"><span>Uit</span><div class="step"><button data-p="2" data-d="-1" aria-label="Uitademen korter">&minus;</button><span id="pv2">8</span><button data-p="2" data-d="1" aria-label="Uitademen langer">+</button></div></div>
+      <div class="pcell"><span>Vast</span><div class="step"><button data-p="3" data-d="-1" aria-label="Vasthouden korter">&minus;</button><span id="pv3">0</span><button data-p="3" data-d="1" aria-label="Vasthouden langer">+</button></div></div>
+    </div>
+
+    <!-- 3. Aantal cycli -->
+    <div class="row">
+      <div class="chips" role="group" aria-label="Aantal cycli">
+        <button class="chip" data-cyc="4">4</button>
+        <button class="chip" data-cyc="8">8</button>
+        <button class="chip" data-cyc="12">12</button>
+      </div>
+      <div class="step">
+        <button data-cd="-1" aria-label="Minder cycli">&minus;</button><span id="cv">8</span><button data-cd="1" aria-label="Meer cycli">+</button>
+      </div>
+    </div>
+
+    <!-- 5. Geluid en trilling -->
+    <div class="togs">
+      <button class="tog" id="snd" aria-pressed="true">Geluid: aan</button>
+      <button class="tog" id="vib" aria-pressed="true">Trilling: aan</button>
+    </div>
+    <p class="hint">iPhone: zet de stilteschakelaar uit om het geluid te horen.</p>
+
+    <div id="total"></div>
+  </section>
+
+  <button id="go">Start</button>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* ===== 1. VASTE GEGEVENS EN INSTELLINGEN ===== */
+var PRESETS = {
+  ontspanning: [4, 7, 8, 0],
+  box:         [4, 4, 4, 4],
+  balans:      [5, 0, 5, 0]
+};
+var PHASE_TEXT = ['Adem in', 'Houd vast', 'Adem uit', 'Houd vast'];
+var FREQ = [523.25, 440, 392, 349.23];
+var KEY = 'adem.v1';
+var DEFAULTS = { preset: 'ontspanning', params: [4, 7, 8, 0], cycles: 8, sound: true, vibrate: true };
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function load() {
+  var S = JSON.parse(JSON.stringify(DEFAULTS));
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (!raw) return S;
+    var o = JSON.parse(raw);
+    if (o && Array.isArray(o.params) && o.params.length === 4) {
+      var ok = true;
+      for (var i = 0; i < 4; i++) {
+        var min = (i === 0 || i === 2) ? 1 : 0;
+        if (typeof o.params[i] !== 'number' || o.params[i] < min || o.params[i] > 15) ok = false;
+      }
+      if (ok) S.params = o.params.map(Math.round);
+    }
+    if (o && (PRESETS[o.preset] || o.preset === 'eigen')) S.preset = o.preset;
+    if (PRESETS[S.preset]) S.params = PRESETS[S.preset].slice();
+    if (o && typeof o.cycles === 'number') S.cycles = clamp(Math.round(o.cycles), 1, 50);
+    if (o && typeof o.sound === 'boolean') S.sound = o.sound;
+    if (o && typeof o.vibrate === 'boolean') S.vibrate = o.vibrate;
+  } catch (e) { /* opslag geblokkeerd: standaardwaarden */ }
+  return S;
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+var S = load();
+
+/* ===== 2. ELEMENTEN EN TOESTAND ===== */
+function $(id) { return document.getElementById(id); }
+var orb = $('orb'), phaseEl = $('phase'), countEl = $('count'), subEl = $('sub'),
+    cycEl = $('cyc'), goBtn = $('go');
+var reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+var MIN = reduce ? 0.82 : 0.55, MAX = 1, REST = reduce ? 0.9 : 0.7;
+var canVibrate = typeof navigator.vibrate === 'function';
+var state = 'idle';           // idle | counting | running | done
+var run = null, timer = null;
+
+function setScale(scale, secs) {
+  orb.style.transition = secs > 0 ? 'transform ' + secs.toFixed(2) + 's ease-in-out' : 'none';
+  orb.style.transform = 'scale(' + scale + ')';
+}
+function fmt(sec) {
+  var m = Math.floor(sec / 60), s = sec % 60;
+  if (m === 0) return s + ' s';
+  if (s === 0) return m + ' min';
+  return m + ' min ' + s + ' s';
+}
+function cycleLen() { return S.params[0] + S.params[1] + S.params[2] + S.params[3]; }
+function idleText() {
+  phaseEl.classList.add('big');
+  phaseEl.textContent = 'Klaar?'; countEl.textContent = ''; subEl.textContent = '';
+  cycEl.innerHTML = '&nbsp;';
+}
+
+/* ===== 3. WEERGAVE VAN DE INSTELLINGEN ===== */
+function render() {
+  var pb = document.querySelectorAll('[data-preset]');
+  for (var i = 0; i < pb.length; i++) {
+    var on = pb[i].getAttribute('data-preset') === S.preset;
+    pb[i].classList.toggle('on', on);
+    pb[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  $('pat-eigen').textContent = S.params.join('-');
+  $('eigenbox').classList.toggle('open', S.preset === 'eigen');
+  for (i = 0; i < 4; i++) $('pv' + i).textContent = S.params[i];
+  var cb = document.querySelectorAll('[data-cyc]');
+  for (i = 0; i < cb.length; i++) cb[i].classList.toggle('on', +cb[i].getAttribute('data-cyc') === S.cycles);
+  $('cv').textContent = S.cycles;
+  $('total').textContent = S.cycles + (S.cycles === 1 ? ' cyclus' : ' cycli') +
+    ' · ca. ' + fmt(S.cycles * cycleLen());
+  $('snd').textContent = 'Geluid: ' + (S.sound ? 'aan' : 'uit');
+  $('snd').setAttribute('aria-pressed', S.sound ? 'true' : 'false');
+  $('vib').textContent = 'Trilling: ' + (S.vibrate ? 'aan' : 'uit');
+  $('vib').setAttribute('aria-pressed', S.vibrate ? 'true' : 'false');
+  $('vib').hidden = !canVibrate;   // iPhone: geen trilling in de browser
+}
+
+$('settings').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null;
+  if (!b) return;
+  var d = b.dataset;
+  if (d.preset) {
+    S.preset = d.preset;
+    if (PRESETS[d.preset]) S.params = PRESETS[d.preset].slice();
+  } else if (d.p !== undefined) {
+    var i = +d.p, min = (i === 0 || i === 2) ? 1 : 0;
+    S.params[i] = clamp(S.params[i] + (+d.d), min, 15);
+    S.preset = 'eigen';
+  } else if (d.cyc) {
+    S.cycles = +d.cyc;
+  } else if (d.cd) {
+    S.cycles = clamp(S.cycles + (+d.cd), 1, 50);
+  } else if (b.id === 'snd') {
+    S.sound = !S.sound;
+  } else if (b.id === 'vib') {
+    S.vibrate = !S.vibrate;
+  } else { return; }
+  save(); render();
+  if (state === 'done') { state = 'idle'; setScale(REST, 1); idleText(); }
+});
+
+/* ===== 4. GELUID (Web Audio) EN TRILLING ===== */
+var ac = null, master = null;
+
+// Alleen aanroepen binnen de tik op Start (Android en iOS blokkeren anders).
+function ensureAudio() {
+  if (!S.sound) return;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!ac) { ac = new AC(); master = ac.createGain(); master.connect(ac.destination); }
+    if (ac.state === 'suspended') ac.resume();
+    master.gain.cancelScheduledValues(ac.currentTime);
+    master.gain.setValueAtTime(1, ac.currentTime);
+    // Stille buffer: ontgrendelt audio op iOS
+    var src = ac.createBufferSource();
+    src.buffer = ac.createBuffer(1, 1, 22050);
+    src.connect(ac.destination);
+    src.start(0);
+  } catch (e) {}
+}
+function bell(freq, dur, vol, delay) {
+  if (!S.sound || !ac || !master) return;
+  try {
+    var t = ac.currentTime + (delay || 0);
+    [[freq, vol, dur], [freq * 2.01, vol * 0.22, dur * 0.6]].forEach(function (p) {
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = p[0];
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(p[1], t + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + p[2]);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + p[2] + 0.05);
+    });
+  } catch (e) {}
+}
+function fadeSound() {
+  if (!ac || !master) return;
+  try {
+    var t = ac.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value, t);
+    master.gain.linearRampToValueAtTime(0, t + 0.08);
+  } catch (e) {}
+}
+function buzz(p) {
+  if (S.vibrate && canVibrate) { try { navigator.vibrate(p); } catch (e) {} }
+}
+
+/* ===== 5. SCHERM AAN HOUDEN (Wake Lock) ===== */
+var wl = null;
+function lockScreen() {
+  try {
+    if (!('wakeLock' in navigator) || wl) return;
+    navigator.wakeLock.request('screen').then(function (l) {
+      wl = l;
+      l.addEventListener('release', function () { wl = null; });
+    }).catch(function () {});
+  } catch (e) {}
+}
+function unlock() {
+  try { if (wl) wl.release(); } catch (e) {}
+  wl = null;
+}
+
+/* ===== 6. SESSIE: START, TICK, EINDE, STOP ===== */
+function start() {
+  ensureAudio();
+  var ph = [], len = 0;
+  for (var i = 0; i < 4; i++) {
+    if (S.params[i] > 0) { ph.push({ i: i, d: S.params[i] }); len += S.params[i]; }  // fase van 0 s overslaan
+  }
+  var now = performance.now();
+  run = { ph: ph, len: len, total: len * S.cycles, t0: now, last: now, key: -1, cnt: null };
+  state = 'counting';
+  phaseEl.classList.remove('big');
+  document.body.classList.add('run');
+  goBtn.textContent = 'Stop'; goBtn.classList.add('stop');
+  subEl.textContent = '';
+  setScale(MIN, 2.8);
+  lockScreen();
+  tick();
+  timer = setInterval(tick, 50);
+}
+
+function enterPhase(idx, remain, silent) {
+  phaseEl.textContent = PHASE_TEXT[idx];
+  if (idx === 0) setScale(MAX, remain);
+  else if (idx === 2) setScale(MIN, remain);
+  else setScale(idx === 1 ? MAX : MIN, 0);
+  if (!silent) { bell(FREQ[idx], 1.6, 0.16); buzz(30); }
+}
+
+function tick() {
+  if (!run) return;
+  var now = performance.now();
+  var t = (now - run.t0) / 1000;
+  var gap = now - run.last;
+  run.last = now;
+
+  if (t < 3) {                                   // aftellen 3-2-1
+    var n = 3 - Math.floor(t);
+    if (run.cnt !== n) {
+      run.cnt = n;
+      phaseEl.textContent = 'Maak je klaar';
+      countEl.textContent = n;
+      cycEl.innerHTML = '&nbsp;';
+    }
+    return;
+  }
+
+  var s = t - 3;
+  if (s >= run.total) { finish(); return; }
+
+  var cyc = Math.floor(s / run.len), w = s - cyc * run.len, acc = 0, pi = 0;
+  for (; pi < run.ph.length; pi++) {
+    if (w < acc + run.ph[pi].d) break;
+    acc += run.ph[pi].d;
+  }
+  if (pi >= run.ph.length) { pi = run.ph.length - 1; acc -= run.ph[pi].d; }
+  var p = run.ph[pi], remain = acc + p.d - w, key = cyc * 10 + pi;
+
+  if (key !== run.key) {
+    var first = run.key === -1;
+    run.key = key; state = 'running';
+    enterPhase(p.i, remain, gap > 1500 && !first);   // stil als de app net uit de achtergrond komt
+    cycEl.textContent = 'Cyclus ' + (cyc + 1) + ' van ' + S.cycles;
+  }
+  var c = Math.max(1, Math.ceil(remain - 0.001));
+  if (run.cnt !== c) { run.cnt = c; countEl.textContent = c; }
+}
+
+function backToStart() {
+  clearInterval(timer); timer = null; run = null;
+  unlock();
+  document.body.classList.remove('run');
+  goBtn.textContent = 'Start'; goBtn.classList.remove('stop');
+}
+
+function finish() {
+  var dur = run ? run.total : 0;
+  backToStart();
+  state = 'done';
+  setScale(REST, 2);
+  phaseEl.classList.add('big');
+  phaseEl.textContent = 'Goed gedaan';
+  countEl.textContent = '';
+  subEl.textContent = 'Voltooid in ' + fmt(dur);
+  cycEl.innerHTML = '&nbsp;';
+  bell(392, 2.4, 0.18); bell(523.25, 2.8, 0.14, 0.4);
+  buzz([40, 80, 40]);
+}
+
+function stop() {
+  fadeSound();
+  backToStart();
+  state = 'idle';
+  setScale(REST, 1);
+  idleText();
+}
+
+goBtn.addEventListener('click', function () {
+  if (state === 'idle' || state === 'done') start(); else stop();
+});
+
+// Terug uit de achtergrond: wake lock opnieuw vragen en tijdlijn herberekenen
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible' && run) {
+    lockScreen();
+    try { if (ac && ac.state === 'suspended') ac.resume(); } catch (e) {}
+    tick();
+  }
+});
+
+/* ===== 7. ICOON EN MANIFEST (voor startscherm) ===== */
+function makeIcon(size) {
+  try {
+    var c = document.createElement('canvas'); c.width = c.height = size;
+    var x = c.getContext('2d'), k = size / 180;
+    x.fillStyle = '#0f1724'; x.fillRect(0, 0, size, size);
+    var g = x.createRadialGradient(90 * k, 78 * k, 4 * k, 90 * k, 90 * k, 60 * k);
+    g.addColorStop(0, 'rgba(167,155,209,.95)'); g.addColorStop(1, 'rgba(127,184,176,.6)');
+    x.fillStyle = g; x.beginPath(); x.arc(90 * k, 90 * k, 54 * k, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = 'rgba(214,228,234,.35)'; x.lineWidth = 3 * k;
+    x.beginPath(); x.arc(90 * k, 90 * k, 72 * k, 0, Math.PI * 2); x.stroke();
+    return c.toDataURL('image/png');
+  } catch (e) { return null; }
+}
+try {
+  var i180 = makeIcon(180), i192 = makeIcon(192), i512 = makeIcon(512);
+  if (i180) $('touchicon').setAttribute('href', i180);
+  var icons = [];
+  if (i192) icons.push({ src: i192, sizes: '192x192', type: 'image/png' });
+  if (i512) icons.push({ src: i512, sizes: '512x512', type: 'image/png' });
+  var mf = {
+    name: 'Adem', short_name: 'Adem', display: 'standalone', orientation: 'portrait',
+    background_color: '#0f1724', theme_color: '#0f1724', icons: icons
+  };
+  var link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(mf));
+  document.head.appendChild(link);
+} catch (e) {}
+
+/* ===== 8. OPSTARTEN ===== */
+render();
+idleText();
+setScale(REST, 0);
+})();
+</script>
+</body>
+</html>
